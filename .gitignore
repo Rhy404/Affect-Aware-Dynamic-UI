@@ -1,0 +1,7 @@
+__pycache__/
+node_modules/
+venv/
+*.pth
+*.pt
+*.npy
+processed_data/
