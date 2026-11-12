@@ -8,6 +8,7 @@ scikit-learn
 pandas
 numpy
 librosa
+av                 # PyAV: Member 1's audio_features.py decodes audio with it
 opencv-python<5  # 4.x still ships the Haar face detector used for live face crops
 matplotlib
 seaborn

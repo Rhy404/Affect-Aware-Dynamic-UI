@@ -50,7 +50,7 @@ export default function DemoPanel({
         </span>
         {online && (
           <span className={health?.mode === "model" ? "text-emerald-300" : "text-amber-300"}>
-            {health?.mode === "model" ? `Model: ${health.dimensions.length} loaded` : "Mock model (no checkpoint yet)"}
+            {health?.mode === "model" ? "Trained model loaded" : "Mock model (no trained model yet)"}
           </span>
         )}
         {online && <span className="text-zinc-500">WS {wsConnected ? "live" : "reconnecting"}</span>}
@@ -117,9 +117,14 @@ export default function DemoPanel({
               <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {live.error}
             </p>
           )}
-          {health?.placeholder_features && health?.mode === "model" && (
+          {health?.mode === "model" && health?.preprocessing && !health.preprocessing.found && (
             <p className="flex items-start gap-1.5 text-[11px] text-amber-300">
-              <AlertTriangle size={12} className="mt-0.5 shrink-0" /> Using placeholder preprocessing. Predictions need Member 1's extract_features functions.
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" /> Backend can't find Member 1's preprocessing code, so live sensing can't feed the model. Set AFFECT_PREPROCESSING_DIR.
+            </p>
+          )}
+          {health?.model_error && (
+            <p className="flex items-start gap-1.5 text-[11px] text-rose-300">
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" /> Model file failed to load: {health.model_error}
             </p>
           )}
 
@@ -131,7 +136,7 @@ export default function DemoPanel({
           <p className="text-[11px] text-zinc-500">
             {live.status === "running"
               ? `Sending a 2 s window every 2.5 s${live.latencyMs != null ? ` · ${live.latencyMs} ms` : ""}${
-                  live.lastResult?.face_detected === false ? " · no face found" : ""
+                  live.lastResult?.skipped ? " · no face in frame, window skipped" : ""
                 }`
               : "Auto mode also follows states pushed to POST /simulate."}
           </p>

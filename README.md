@@ -14,17 +14,18 @@ Remote workers spend hours in meeting apps that keep pushing chat messages, badg
 
 ```mermaid
 flowchart LR
-    A[AVCAffe dataset<br/>face crops + audio] -->|preprocessing/<br/>extract_features.py| B[Feature tensors<br/>.pt / .npy]
+    A[AVCAffe dataset<br/>face crops + audio] -->|Member 1: ClipReader| B["2 s windows<br/>video (3,16,112,112)<br/>audio (1,80,200)"]
     B --> C[models/<br/>Model 1, 2, 3 training]
-    C -->|multimodal_model_checkpoint.pth| D[FastAPI backend<br/>backend/app.py]
-    E[Browser webcam + mic] -->|POST /predict-live<br/>JPEG frames + 16 kHz WAV| D
+    C -->|multimodal_model.pt| D[FastAPI backend<br/>backend/app.py]
+    E[Browser webcam + mic] -->|POST /predict-live<br/>16 JPEG frames + 16 kHz WAV| D
+    H[Validation clips<br/>replay_val_clips.py] -->|POST /predict-window| D
     D -->|WebSocket /ws<br/>cognitive state| F[React meeting UI<br/>frontend/]
     G[Manual override<br/>buttons / POST /simulate] --> F
 ```
 
-1. **Data** (Member 1): AVCAffe face crops and audio are turned into video and log-mel audio feature tensors, with participant-disjoint train/val splits.
+1. **Data** (Member 1): AVCAffe clips are cut into aligned 2-second windows: 16 RGB face-crop frames at 8 fps (112×112) and an 80-bin log-mel spectrogram (16 kHz, 10 ms hop), normalised with train-set statistics, using the official participant-disjoint train/val split. Each window has three binary labels (score > 10 = High) in the order Mental Demand, Effort, Temporal Demand.
 2. **Models** (Members 2 and 3): Model 1 (unimodal baseline), Model 2 (Random Forest on extracted features) and **Model 3 (multimodal late fusion)**, the core contribution.
-3. **Backend** (Member 4): FastAPI loads the Model 3 checkpoint, preprocesses live webcam and mic windows, predicts P(High) per dimension, smooths the predictions, and pushes the resulting state over a WebSocket.
+3. **Backend** (Member 4): FastAPI loads the trained model, turns live webcam and mic windows into the **same** tensors as Member 1's pipeline (reusing his `log_mel` and normalisation stats), predicts P(High) per dimension, smooths the predictions, and pushes the resulting state over a WebSocket.
 4. **Frontend** (Member 4): a React + Tailwind meeting UI that applies an adaptation policy for each state.
 
 ### Adaptation policy
@@ -66,9 +67,20 @@ npm run dev
 #    -> http://localhost:3000
 ```
 
-With no checkpoint present, the backend runs in **mock mode**, so the UI works end to end before training is done. To point the frontend at a different backend URL, create `frontend/.env.local` containing `VITE_API_URL=http://<host>:8000`.
+With no model file present, the backend runs in **mock mode**, so the UI works end to end before training is done. To point the frontend at a different backend URL, create `frontend/.env.local` containing `VITE_API_URL=http://<host>:8000`.
 
-**Run the backend tests:** `python -m pytest backend/tests -q`
+**Using a trained model with live sensing.** The backend reuses Member 1's preprocessing code, read-only, to build live tensors. It looks in `preprocessing/`, `src/preprocessing/`, and `../ml-CSD361/src/preprocessing/` (his repo cloned next to this one). Anywhere else, set:
+
+```bash
+# macOS / Linux
+export AFFECT_PREPROCESSING_DIR=/path/to/ml-CSD361/src/preprocessing
+# Windows PowerShell
+$env:AFFECT_PREPROCESSING_DIR = "C:\path\to\ml-CSD361\src\preprocessing"
+```
+
+`configs/norm_stats.json` is found automatically next to his `src/` folder (or set `AFFECT_NORM_STATS`). `GET /health` → `"preprocessing"` shows what was found.
+
+**Run the backend tests:** `python -m pytest backend/tests -q`. Set `AFFECT_PREPROCESSING_DIR` as above to also run the 3 tests that check the live tensors are identical to Member 1's `ClipReader` output; without it they are skipped.
 
 ---
 
@@ -77,7 +89,12 @@ With no checkpoint present, the backend runs in **mock mode**, so the UI works e
 Click **Adapt** in the top bar (or press **D**) to open the control panel.
 
 - **Manual mode (Option B, the reliable backup):** click a state or press **1–4**. The UI adapts instantly, with no camera, model or network involved.
-- **Auto mode (Option A, live inference):** click *Start live sensing*. Every 2.5 s the browser sends a 2-second window of webcam frames and microphone audio to `/predict-live`. The panel shows the smoothed P(High) for each dimension against the 60% threshold.
+- **Auto mode (Option A, live inference):** click *Start live sensing*. Every 2.5 s the browser sends a 2-second window (16 webcam frames + microphone audio) to `/predict-live`. The panel shows the smoothed P(High) for each dimension against the 60% threshold. Windows where a face is visible in fewer than 75% of frames are skipped, as in training.
+- **Replay validation clips (Option C, the honest model demo):** live webcam face crops never look exactly like AVCAffe's, so the clearest proof that the *trained* model drives the UI is to replay held-out validation windows. With the UI in Auto mode, run:
+  ```bash
+  python -m backend.replay_val_clips --data C:\dev\data\avcaffe --preprocessing ..\ml-CSD361\src\preprocessing --n 30
+  ```
+  It plays alternating blocks of Low and High Mental Demand clips and prints the true labels next to the predictions, while the UI switches modes.
 - **Remote control:** in Auto mode the UI also follows states pushed from anywhere, e.g. a teammate's laptop:
   ```bash
   curl -X POST http://127.0.0.1:8000/simulate -H "Content-Type: application/json" -d '{"state": "High Effort"}'
@@ -89,10 +106,11 @@ Click **Adapt** in the top bar (or press **D**) to open the control panel.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Status, `model` vs `mock` mode, loaded checkpoints and their input sizes |
+| GET | `/health` | Status, `model` vs `mock` mode, model load errors, whether Member 1's preprocessing was found, expected tensor shapes |
 | GET | `/state` | Current cognitive state |
-| POST | `/predict-load` | Predict from precomputed features: `{"video_features": [...256], "audio_features": [...128]}`. With no body it returns a mock prediction, as in the plan |
-| POST | `/predict-live` | Multipart upload: `frames` (JPEG images) + `audio` (16-bit PCM WAV) |
+| POST | `/predict-load` | The plan's original endpoint (no body): a mock prediction. With a real model, use the two below |
+| POST | `/predict-live` | Multipart upload: `frames` (~16 JPEG images over 2 s) + `audio` (16-bit PCM WAV) |
+| POST | `/predict-window` | Multipart upload: `window`, an `.npz` with `video` (3,16,112,112) and `audio` (1,80,200) exactly as `ClipReader` returns them, plus optional `labels` |
 | POST | `/simulate` | Force a state: `{"state": "High Mental Demand"}` |
 | POST | `/reset` | Clear smoothing and return to Normal Load |
 | WS | `/ws` | Pushes every state change |
@@ -104,10 +122,11 @@ Every prediction returns:
   "cognitive_state": "High Mental Demand",
   "trigger_focus_mode": true,
   "source": "model",
-  "probabilities": {"mental_demand": 0.81},
-  "smoothed": {"mental_demand": 0.74},
+  "probabilities": {"mental_demand": 0.81, "effort": 0.35, "temporal_demand": 0.22},
+  "smoothed": {"mental_demand": 0.74, "effort": 0.31, "temporal_demand": 0.25},
   "timestamp": 1731070000.0,
-  "face_detected": true
+  "face_fraction": 1.0,
+  "skipped": false
 }
 ```
 
@@ -115,27 +134,39 @@ Every prediction returns:
 
 ## Integration contracts (hand-offs between members)
 
-### Member 2 → backend: the trained checkpoint
-Save the weights with `torch.save(model.state_dict(), "multimodal_model_checkpoint.pth")` and place the file in `backend/`. The backend reads the input sizes and number of classes **from the checkpoint itself**, so changing the 256/128 feature sizes needs no backend edits. It assumes:
-- class **1 = High** load (score > 10) and class 0 = Low;
-- layer names match `backend/fusion_model.py` (`video_branch`, `audio_branch`, `fusion_mlp`). If you change the architecture, update that file to match.
+### Member 1 → backend: data format (done)
+Member 1's pipeline (`ml-CSD361/src/preprocessing`, `ClipReader` in `dataset.py`) produces, per 2-second window:
 
-Optional extra binary models, one per dimension, are picked up automatically: `temporal_demand_checkpoint.pth` and `effort_checkpoint.pth`. `/health` reports any checkpoint that fails to load, along with the reason.
+| Tensor | Shape | Contents |
+|---|---|---|
+| `video` | (3, 16, 112, 112) | RGB face crops, 16 frames at 8 fps, `x/255` then per-channel `(x − mean) / std` |
+| `audio` | (1, 80, 200) | 80-bin log-mel, 16 kHz, 10 ms hop, `(x − mean) / std` |
+| `labels` | (3,) | `mental_demand_bin`, `effort_bin`, `temporal_demand_bin` (1 = High, score > 10; −1 = missing) |
 
-> `.pth` files are git-ignored. Share them through Google Drive.
+The backend builds the same tensors from live webcam and mic data (`backend/features.py`). It loads his `audio_features.py`, `video_features.py` and `configs/norm_stats.json` read-only, and does not copy or modify them. A test checks that the live tensors equal `ClipReader`'s output. The one step that cannot be identical is the face crop: AVCAffe ships its own crops, while live frames are cropped with OpenCV's face detector (largest face, 20% margin).
 
-### Member 1 → backend: live preprocessing
-For live predictions to mean anything, webcam and mic data must be preprocessed **exactly** like the training data. If `preprocessing/extract_features.py` defines these two functions, the backend uses them automatically:
+> Note for the team: the plan's original Model 3 took 256-d video and 128-d audio **vectors**. Member 1's data is raw **tensors**, so Model 3 needs encoders (e.g. a 3D CNN for video and a 2D CNN for the spectrogram) before fusion, and the Random Forest baseline needs a feature-extraction step to flatten or pool the windows.
+
+### Member 2 → backend: the trained model
+The backend calls `model(video, audio)` with `video` (B,3,16,112,112) and `audio` (B,1,80,200). The easiest hand-off needs no copy of the model class. Export it once after training and put the file in `backend/`:
 
 ```python
-def video_features_from_frames(frames: list[np.ndarray]) -> np.ndarray: ...
-    # ~2 s of BGR uint8 webcam frames -> 1-D feature vector (same as training)
-
-def audio_features_from_waveform(waveform: np.ndarray, sample_rate: int) -> np.ndarray: ...
-    # ~2 s of mono float32 audio in [-1, 1] -> 1-D feature vector (same as training)
+model.eval()
+example = (torch.zeros(1, 3, 16, 112, 112), torch.zeros(1, 1, 80, 200))
+torch.jit.trace(model, example).save("backend/multimodal_model.pt")        # TorchScript
+# or, on newer PyTorch:
+torch.export.save(torch.export.export(model, example), "backend/multimodal_model.pt2")
 ```
 
-Until then, placeholder features of the right size are used (face crop → 16×16 → 256-d; 128-bin log-mel mean → 128-d), and `/health` reports `"placeholder_features": true`.
+Accepted outputs, in Member 1's label order (Mental Demand, Effort, Temporal Demand):
+- `(B, 3)` one logit per target (multi-label, sigmoid);
+- `(B, 3, 2)` two-class logits per target (class 1 = High);
+- a tuple of 3 heads, each `(B, 2)` or `(B, 1)`;
+- `(B, 2)` or `(B, 1)` if only Mental Demand is trained.
+
+A plain `state_dict` (`backend/multimodal_model_checkpoint.pth`) also works, if `AFFECT_MODEL_CLASS=package.module:ClassName` points to a class that can be built with no arguments. `/health` shows any load error.
+
+> Model files (`.pt`, `.pt2`, `.pth`) are git-ignored. Share them through Google Drive.
 
 ---
 
@@ -156,13 +187,13 @@ Until then, placeholder features of the right size are used (face crop → 16×1
 ```
 Affect-Aware-Dynamic-UI/
 ├── requirements.txt            # shared Python dependencies
-├── preprocessing/              # Member 1: AVCAffe feature extraction + split checks
+├── preprocessing/              # Member 1: AVCAffe preprocessing (currently in the ml-CSD361 repo)
 ├── models/                     # Members 2 & 3: dataset, Model 3, baselines, evaluation
 ├── backend/                    # Member 4: FastAPI inference server
 │   ├── app.py                  #   routes + WebSocket
-│   ├── inference.py            #   checkpoint loading, mock mode, smoothing
-│   ├── features.py             #   live webcam/mic -> features (Member 1 contract)
-│   ├── fusion_model.py         #   Model 3 architecture used to load the checkpoint
+│   ├── inference.py            #   model loading (TorchScript / torch.export), mock mode, smoothing
+│   ├── features.py             #   live webcam/mic -> Member 1's tensors (reuses his code read-only)
+│   ├── replay_val_clips.py     #   demo: stream validation windows through the model and UI
 │   └── tests/
 ├── frontend/                   # Member 4: React + Tailwind meeting UI
 │   ├── src/App.js              #   state logic + adaptation

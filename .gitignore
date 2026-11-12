@@ -13,7 +13,9 @@ frontend/dist/
 # Data and model weights (shared via Google Drive, never committed)
 *.pth
 *.pt
+*.pt2
 *.npy
+*.npz
 processed_data/
 
 # OS / editor

@@ -60,6 +60,7 @@ export const DIMENSION_LABELS = {
 };
 
 // Live sensing: how often the browser sends a webcam + mic window to the backend.
+// Must match Member 1's training windows: 2 s, 16 frames (8 fps), audio resampled to 16 kHz.
 export const LIVE_INTERVAL_MS = 2500;
-export const FRAMES_PER_WINDOW = 8;
+export const FRAMES_PER_WINDOW = 16;
 export const AUDIO_WINDOW_SECONDS = 2;
