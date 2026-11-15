@@ -1,7 +1,24 @@
+# Python
 __pycache__/
-node_modules/
+*.pyc
+.pytest_cache/
 venv/
+.venv/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+.env.local
+
+# Data and model weights (shared via Google Drive, never committed)
 *.pth
 *.pt
+*.pt2
 *.npy
+*.npz
 processed_data/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

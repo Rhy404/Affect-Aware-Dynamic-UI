@@ -1,0 +1,18 @@
+{
+  "note": "computed on a random sample of TRAIN clips with crops; audio stats use has_audio clips only",
+  "sample_clips": 1000,
+  "seed": 0,
+  "audio_logmel_mean": -7.845194752164796,
+  "audio_logmel_std": 5.500759825930831,
+  "no_audio_logmel_mean_for_reference": -11.73374214535027,
+  "video_rgb_mean_0to1": [
+    0.4632774404917225,
+    0.36904275930564934,
+    0.3584906114826548
+  ],
+  "video_rgb_std_0to1": [
+    0.2530651107263193,
+    0.22670794633466554,
+    0.22395983829251842
+  ]
+}

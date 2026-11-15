@@ -1,13 +1,24 @@
+# Shared Python dependencies for the whole team:  pip install -r requirements.txt
+
+# ML (Members 1-3)
 torch
 torchvision
 torchaudio
-fastapi
-uvicorn
 scikit-learn
 pandas
 numpy
 librosa
-opencv-python
+av                 # PyAV: Member 1's audio_features.py decodes audio with it
+opencv-python<5  # 4.x still ships the Haar face detector used for live face crops
 matplotlib
 seaborn
+
+# Backend (Member 4)
+fastapi
+uvicorn[standard]  # [standard] is required for the /ws WebSocket endpoint
+python-multipart   # required for webcam/mic uploads to /predict-live
 pydantic
+
+# Backend tests
+pytest
+httpx
