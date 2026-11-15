@@ -69,18 +69,9 @@ npm run dev
 
 With no model file present, the backend runs in **mock mode**, so the UI works end to end before training is done. To point the frontend at a different backend URL, create `frontend/.env.local` containing `VITE_API_URL=http://<host>:8000`.
 
-**Using a trained model with live sensing.** The backend reuses Member 1's preprocessing code, read-only, to build live tensors. It looks in `preprocessing/`, `src/preprocessing/`, and `../ml-CSD361/src/preprocessing/` (his repo cloned next to this one). Anywhere else, set:
+**Using a trained model with live sensing.** The backend reuses Member 1's preprocessing code (`preprocessing/audio_features.py`, `preprocessing/video_features.py`) and `configs/norm_stats.json`, read-only, to build live tensors. Both are found automatically inside this repo, and `GET /health` → `"preprocessing"` shows what was found. To use a copy somewhere else, set `AFFECT_PREPROCESSING_DIR` and `AFFECT_NORM_STATS`.
 
-```bash
-# macOS / Linux
-export AFFECT_PREPROCESSING_DIR=/path/to/ml-CSD361/src/preprocessing
-# Windows PowerShell
-$env:AFFECT_PREPROCESSING_DIR = "C:\path\to\ml-CSD361\src\preprocessing"
-```
-
-`configs/norm_stats.json` is found automatically next to his `src/` folder (or set `AFFECT_NORM_STATS`). `GET /health` → `"preprocessing"` shows what was found.
-
-**Run the backend tests:** `python -m pytest backend/tests -q`. Set `AFFECT_PREPROCESSING_DIR` as above to also run the 3 tests that check the live tensors are identical to Member 1's `ClipReader` output; without it they are skipped.
+**Run the backend tests:** `python -m pytest backend/tests -q` (19 tests, including 3 that check the live tensors are identical to Member 1's `ClipReader` output).
 
 ---
 
@@ -92,7 +83,7 @@ Click **Adapt** in the top bar (or press **D**) to open the control panel.
 - **Auto mode (Option A, live inference):** click *Start live sensing*. Every 2.5 s the browser sends a 2-second window (16 webcam frames + microphone audio) to `/predict-live`. The panel shows the smoothed P(High) for each dimension against the 60% threshold. Windows where a face is visible in fewer than 75% of frames are skipped, as in training.
 - **Replay validation clips (Option C, the honest model demo):** live webcam face crops never look exactly like AVCAffe's, so the clearest proof that the *trained* model drives the UI is to replay held-out validation windows. With the UI in Auto mode, run:
   ```bash
-  python -m backend.replay_val_clips --data C:\dev\data\avcaffe --preprocessing ..\ml-CSD361\src\preprocessing --n 30
+  python -m backend.replay_val_clips --data C:\dev\data\avcaffe --n 30
   ```
   It plays alternating blocks of Low and High Mental Demand clips and prints the true labels next to the predictions, while the UI switches modes.
 - **Remote control:** in Auto mode the UI also follows states pushed from anywhere, e.g. a teammate's laptop:
@@ -135,7 +126,7 @@ Every prediction returns:
 ## Integration contracts (hand-offs between members)
 
 ### Member 1 → backend: data format (done)
-Member 1's pipeline (`ml-CSD361/src/preprocessing`, `ClipReader` in `dataset.py`) produces, per 2-second window:
+Member 1's pipeline (`preprocessing/`, `ClipReader` in `dataset.py`; documented in [preprocessing/README.md](preprocessing/README.md)) produces, per 2-second window:
 
 | Tensor | Shape | Contents |
 |---|---|---|
@@ -187,7 +178,9 @@ A plain `state_dict` (`backend/multimodal_model_checkpoint.pth`) also works, if 
 ```
 Affect-Aware-Dynamic-UI/
 ├── requirements.txt            # shared Python dependencies
-├── preprocessing/              # Member 1: AVCAffe preprocessing (currently in the ml-CSD361 repo)
+├── configs/norm_stats.json     # Member 1: train-set normalisation statistics
+├── preprocessing/              # Member 1: AVCAffe preprocessing pipeline (see preprocessing/README.md)
+├── notebooks/                  # Member 2: training notebooks
 ├── models/                     # Members 2 & 3: dataset, Model 3, baselines, evaluation
 ├── backend/                    # Member 4: FastAPI inference server
 │   ├── app.py                  #   routes + WebSocket

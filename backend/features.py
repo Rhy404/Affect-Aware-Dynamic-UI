@@ -1,6 +1,6 @@
 """Live webcam + microphone -> model input tensors, matching Member 1's training data.
 
-Member 1's preprocessing (repo: ml-CSD361, folder src/preprocessing) turns each
+Member 1's preprocessing (preprocessing/ in this repo) turns each
 AVCAffe clip into 2-second windows, normalised in ClipReader (dataset.py):
 
     video  (3, 16, 112, 112) float32  RGB face crops, 16 frames at 8 fps,
@@ -18,7 +18,7 @@ read-only from wherever they live. Search order:
     3. ../ml-CSD361/src/preprocessing/        (his repo cloned next to this one)
 
 and for the stats: $AFFECT_NORM_STATS, then configs/norm_stats.json next to
-his src/ folder, then <repo>/configs/norm_stats.json.
+his preprocessing folder, then <repo>/configs/norm_stats.json.
 
 If his code cannot be found, the backend still runs in mock mode, but a real
 model cannot be fed live data; /health reports this.
@@ -77,7 +77,7 @@ def _find_stats(pre_dir: Path) -> Path | None:
     options = []
     if os.getenv("AFFECT_NORM_STATS"):
         options.append(Path(os.environ["AFFECT_NORM_STATS"]))
-    options += [pre_dir.parent.parent / "configs" / "norm_stats.json", REPO_ROOT / "configs" / "norm_stats.json"]
+    options += [pre_dir.parent / "configs" / "norm_stats.json", pre_dir.parent.parent / "configs" / "norm_stats.json", REPO_ROOT / "configs" / "norm_stats.json"]
     return next((p for p in options if p.is_file()), None)
 
 
