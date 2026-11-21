@@ -30,7 +30,7 @@ function Ctrl({ label, active, onClick, children, badge, className = "" }) {
 }
 
 export default function TopBar({
-  cognitiveState, source, micOn, camOn, sharing, handRaised, chatOpen, chatBadge, demoOpen,
+  cognitiveState, source, micOn, camOn, sharing, handRaised, chatOpen, chatBadge, demoOpen, minimal,
   onToggleMic, onToggleCam, onToggleShare, onToggleHand, onToggleChat, onToggleDemo, onLeave,
 }) {
   const elapsed = useElapsed();
@@ -43,20 +43,25 @@ export default function TopBar({
       </div>
 
       <div className="flex items-center gap-0.5">
-        <Ctrl label="Chat" active={chatOpen} onClick={onToggleChat} badge={chatBadge}>
-          <MessageSquare size={18} />
-        </Ctrl>
-        <Ctrl label="People">
-          <Users size={18} />
-        </Ctrl>
-        <Ctrl label="Raise" active={handRaised} onClick={onToggleHand}>
-          <Hand size={18} />
-        </Ctrl>
-        <Ctrl label="Adapt" active={demoOpen} onClick={onToggleDemo}>
-          <SlidersHorizontal size={18} />
-        </Ctrl>
+        {/* Hidden in Focus / Deep focus: only Camera, Mic and Share stay */}
+        {!minimal && (
+          <>
+            <Ctrl label="Chat" active={chatOpen} onClick={onToggleChat} badge={chatBadge}>
+              <MessageSquare size={18} />
+            </Ctrl>
+            <Ctrl label="People">
+              <Users size={18} />
+            </Ctrl>
+            <Ctrl label="Raise" active={handRaised} onClick={onToggleHand}>
+              <Hand size={18} />
+            </Ctrl>
+            <Ctrl label="Adapt" active={demoOpen} onClick={onToggleDemo}>
+              <SlidersHorizontal size={18} />
+            </Ctrl>
 
-        <span className="mx-2 h-8 w-px bg-shell-700" />
+            <span className="mx-2 h-8 w-px bg-shell-700" />
+          </>
+        )}
 
         <Ctrl label="Camera" active={camOn} onClick={onToggleCam}>
           {camOn ? <Video size={18} /> : <VideoOff size={18} />}

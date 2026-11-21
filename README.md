@@ -30,14 +30,14 @@ flowchart LR
 
 ### Adaptation policy
 
-| Predicted state | UI mode | Chat panel | Notifications and badges | Video layout |
-|---|---|---|---|---|
-| Normal Load | Normal | Open | Shown | Gallery |
-| High Temporal Demand | Quiet mode | Collapsed | Held | Gallery |
-| High Mental Demand | Focus mode | Collapsed | Held | Speaker spotlight + filmstrip |
-| High Effort | Deep focus | Collapsed | Held | Active speaker only |
+| Predicted state | UI mode | Side panels (left rail, chat) | Top-bar controls | Notifications and badges | Video layout |
+|---|---|---|---|---|---|
+| Normal Load | Normal | Shown, chat open | All | Shown | Gallery |
+| High Temporal Demand | Quiet mode | Rail shown, chat collapsed | All | Held | Gallery |
+| High Mental Demand | Focus mode | Hidden | Camera, Mic, Share only | Held | Speaker spotlight + filmstrip |
+| High Effort | Deep focus | Hidden | Camera, Mic, Share only | Held | Active speaker only |
 
-Notifications that arrive during a high-load state are **held rather than lost**. When the user returns to Normal Load, a single "While you were focused" summary appears. The user can always reopen the chat manually, and that choice is respected until the state changes. The policy lives in one table, `frontend/src/config.js`.
+Notifications that arrive during a high-load state are **held rather than lost**. When the user returns to Normal Load, a single "While you were focused" summary appears. In Quiet mode the user can reopen the chat manually, and that choice is respected until the state changes. In Focus and Deep focus the side panels stay hidden until the load drops. The policy lives in one table, `frontend/src/config.js`.
 
 To avoid the UI flickering on noisy predictions, the backend smooths each dimension with an exponential moving average plus hysteresis: P(High) must rise above **0.60** to enter a high state and fall below **0.40** to leave it (`StateSmoother` in `backend/inference.py`).
 

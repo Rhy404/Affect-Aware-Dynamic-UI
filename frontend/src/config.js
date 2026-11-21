@@ -2,6 +2,9 @@
 // The ADAPTATION table is the "policy" of the system: how each predicted
 // cognitive-load state changes the interface. Tune it here; nothing else
 // needs to change. (Worth citing as a table in the research paper.)
+//
+// minimal: true  -> no side panels (left rail and chat panel) and only the
+//                   Camera, Mic and Share controls (plus Leave) in the top bar.
 
 export const API_BASE = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 export const WS_URL = API_BASE.replace(/^http/, "ws") + "/ws";
@@ -30,16 +33,16 @@ export const STATES = {
     short: "Mental",
     mode: "Focus mode",
     tone: "rose",
-    description: "Heavy thinking detected: chat collapses, notifications held, speaker spotlight.",
-    adapt: { chatOpen: false, badges: false, toasts: false, layout: "spotlight" },
+    description: "Heavy thinking detected: side panels hidden, notifications held, speaker spotlight.",
+    adapt: { chatOpen: false, badges: false, toasts: false, layout: "spotlight", minimal: true },
   },
   "High Effort": {
     key: "4",
     short: "Effort",
     mode: "Deep focus",
     tone: "fuchsia",
-    description: "High effort detected: everything non-essential hidden, active speaker only.",
-    adapt: { chatOpen: false, badges: false, toasts: false, layout: "speaker-only" },
+    description: "High effort detected: side panels hidden, notifications held, active speaker only.",
+    adapt: { chatOpen: false, badges: false, toasts: false, layout: "speaker-only", minimal: true },
   },
 };
 
