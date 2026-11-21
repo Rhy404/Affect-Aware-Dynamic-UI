@@ -1,362 +1,152 @@
 # Affect-Aware Dynamic UI
-### AVCAffe Dataset – Multimodal Preprocessing Pipeline
--Note: this repo is currently only for pre-processing , the model will be worked upon in the following weeks from 11th oct 2026
 
-## Overview
+A Teams-style video-meeting interface that estimates a participant's **cognitive load** from face video (and audio, when available) and adapts the UI to it: **Normal**, **High Temporal Demand**, or **Focus Mode** (for example, collapsing the chat panel).
 
-Affect-Aware Dynamic UI is a project that aims to develop an adaptive user interface capable of responding to a user's cognitive and affective state in real time.
+The load estimator is a multimodal model trained on the [AVCAffe](https://github.com/) dataset. It predicts three binary labels per clip:
 
-The system uses multimodal information, including facial video and audio, to estimate cognitive workload. Based on these predictions, the interface can dynamically adapt to reduce cognitive overload and improve the user experience.
-
-For example, when a user experiences high cognitive load, the interface may activate a **Focus Mode** that:
-- Hides unnecessary sidebars and interface elements.
-- Mutes non-essential notifications.
-- Reduces visual clutter.
-- Prioritizes the user's primary task.
-
-This repository focuses specifically on the **data preprocessing component** of the project.
-
-## Project Objectives
-
-The primary objective of this repository is to transform the raw AVCAffe dataset into clean, aligned and model-ready multimodal inputs.
-
-The preprocessing pipeline is designed to:
-
-- Organize raw video clips and ground-truth labels.
-- Generate a structured dataset manifest.
-- Extract audio features using log-Mel spectrograms.
-- Extract facial video features from released face crops.
-- Align audio and video into corresponding temporal windows.
-- Calculate normalization statistics.
-- Provide a reproducible data-loading interface for downstream model training and inference.
-
-## Dataset
-
-**AVCAffe: A Large Scale Audio-Visual Dataset of Cognitive Load and Affect for Remote Work**
-
-Paper: Sarkar, Posen and Etemad, AAAI 2023.
-
-Dataset source: [Borealis Dataverse](https://borealisdata.ca/)
-
-DOI: `10.5683/SP3/PSWY62`
-
-The dataset contains:
-
-| Attribute | Details |
+| Output | Meaning |
 |---|---|
-| Participants | 106 |
-| Total clips | 58,112 |
-| Modalities | Audio and video |
-| Video format | AVI |
-| Video resolution | 456 × 256 |
-| Frame rate | 25 FPS |
-| Audio | AAC, 44.1 kHz, stereo |
-| Clip duration | Approximately 6 seconds |
+| Mental Demand | High / Low |
+| Effort | High / Low |
+| Temporal Demand | High / Low |
 
-### Ground-truth labels
+A clip is labelled **High** when its NASA-TLX style score is at or above the threshold used by the shard generator (`10.5`). Missing labels are stored as `-1` and ignored during training.
 
-The dataset contains cognitive workload and affect-related annotations.
+## Team
 
-**Cognitive workload:**
-- Mental demand
-- Temporal demand
-- Effort
-- Performance
-- Physical demand
-
-**Affective labels:**
-- Arousal
-- Valence
-- Dominance
-
-The current preprocessing pipeline primarily targets mental demand, temporal demand and effort.
-
-Binary workload labels are generated using a threshold of 10:
-
-- High workload: score greater than 10.
-- Low workload: score less than or equal to 10.
-
-Arousal and valence are represented as categorical labels.
-
-## Dataset Splits
-
-The official participant-level split information is used to prevent participant overlap between training and validation.
-
-| Split | Participants | Clips |
-|---|---:|---:|
-| Training | 86 | 47,516 |
-| Validation | 20 | 10,596 |
-| Total | 106 | 58,112 |
-
-The current release metadata provides training and validation splits. An independent test split has not been established in this preprocessing workflow.
-
-## Preprocessing Architecture
-
-The pipeline is organized into four main components.
-
-### 1. Dataset Loading
-
-- Clip reader
-- Dataset adapter for downstream PyTorch integration
-
-### 2. Dataset Preparation
-
-- Manifest generation
-- Face-crop preparation
-- Clip and label organization
-
-### 3. Statistics and Validation
-
-- Audio availability checks
-- Audio/video alignment checks
-- Normalization statistics computation
-
-### 4. Feature Extraction
-
-- Temporal window generation
-- Video feature extraction
-- Audio feature extraction
-
-## Audio Preprocessing
-
-Audio features are extracted using a pure NumPy implementation and PyAV for decoding.
-
-### Processing steps
-
-1. Decode audio from the original video clips.
-2. Downmix stereo audio to mono.
-3. Resample audio to 16 kHz.
-4. Compute the Short-Time Fourier Transform.
-5. Apply a Mel filterbank.
-6. Convert Mel power values into the logarithmic domain.
-7. Divide the resulting spectrogram into temporal windows.
-
-### Audio configuration
-
-| Parameter | Value |
+| Member | Role |
 |---|---|
-| Sampling rate | 16,000 Hz |
-| Mel filters | 80 |
-| FFT size | 1024 |
-| Hop length | 160 samples |
-| Hop duration | 10 ms |
-| Window function | Hann |
-| Mel scale | HTK |
-| Spectrogram | Log-Mel |
-| Window duration | 2 seconds |
+| Siddharth | Dataset and preprocessing |
+| Rhythima | Multimodal fusion model |
+| Bharat | Baseline models and model comparison |
+| Sanya | Teams-style UI, FastAPI backend, integration, repo |
 
-Each approximately 6.04-second clip produces a log-Mel spectrogram of shape:
+## How it works
 
-`(80, 604)`
-
-The spectrogram is divided into three non-overlapping 2-second windows:
-
-`(3, 80, 200)`
-
-**Note:** The AVCAffe paper specifies 80 Mel filters, a 10 ms hop and a 1024-point FFT. Other implementation settings are preprocessing assumptions and should be documented accordingly.
-
-## Video Preprocessing
-
-Video preprocessing will use the released AVCAffe face crops.
-
-The intended transformation follows the video configuration described in the paper:
-
-| Parameter | Value |
-|---|---|
-| Frame sampling rate | 8 FPS |
-| Window duration | 2 seconds |
-| Frames per window | 16 |
-| Frame resolution | 112 × 112 |
-| Expected tensor shape | `3 × 16 × 112 × 112` |
-
-The pipeline will:
-
-1. Load the corresponding face crops.
-2. Sample frames at 8 FPS.
-3. Resize frames to 112 × 112.
-4. Normalize pixel values.
-5. Generate aligned 2-second video windows.
-
-Video processing is currently pending completion and inspection of the face-crops download.
-
-## Audio-Video Temporal Alignment
-
-Audio and video features must correspond to the same time intervals.
-
-The intended windowing strategy uses non-overlapping 2-second windows.
-
-For window `k`, both modalities cover:
-
-`[2k, 2k + 2)`
-
-This ensures that audio and video inputs represent the same temporal segment.
-
-The pipeline will also retain an audio-availability indicator (`has_audio`) to support different strategies for handling near-silent clips:
-
-- Keep the audio as-is.
-- Mask audio when unavailable.
-- Drop clips based on a configurable setting.
-
-The default handling strategy should be explicitly configured and validated before model training.
-
-## No-Audio Investigation
-
-An initial investigation examined the dataset's `no_audio_files.txt` metadata.
-
-Findings:
-
-- 18,632 clips are listed as no-audio clips.
-- This represents approximately 32% of the dataset.
-- Their median audio RMS is approximately 85 times lower than that of normal clips.
-- Some sampled clips were completely silent.
-
-The interpretation that these clips contain no speech is an inference rather than a confirmed dataset definition.
-
-These clips are retained in the manifest, with an audio-availability indicator.
-
-## Repository Structure
-
-The current repository is organized around the following components:
-
-```text
-ml-CSD361/
-│
-├── configs/
-│
-├── notebooks/
-│
-├── docs/
-│
-├── src/
-│   └── preprocessing/
-│       ├── __init__.py
-│       ├── manifest.py
-│       ├── probe_clip.py
-│       ├── audio_features.py
-│       ├── test_audio.py
-│       └── check_no_audio.py
-│
-├── .gitignore
-└── README.md
+```
+webcam / mic ──► preprocessing ──► fusion model ──► 3 High/Low scores ──► UI mode
+                                   (video + audio)       (per-label thresholds)
 ```
 
-Additional preprocessing modules will be added as the pipeline develops.
+1. **Preprocessing** turns each clip into a face-crop video tensor and, when available, a log-mel audio tensor.
+2. **The fusion model** (`models/fusion_model.py`) runs a 3D-conv branch over the video and a 2D-conv branch over the audio, concatenates the two feature vectors, and outputs 3 logits.
+3. **Per-label thresholds** (tuned on validation data, saved in `thresholds.json`) turn probabilities into High/Low.
+4. **The backend** serves predictions to the frontend, which switches UI mode. A manual toggle (Normal / High Temporal Demand / Focus Mode) works without the model and serves as the backup demo.
 
-## Environment Setup
+### Model
 
-### Requirements
+`AffectAwareFusionModel` has four conv blocks per branch (Conv, BatchNorm, ReLU, pooling) and a small fusion head.
 
-- Python 3.13
-- NumPy
-- OpenCV (headless)
-- PyAV
+| Variant | Inputs | Parameters |
+|---|---|---|
+| With audio | video `(B,3,T,H,W)` + audio `(B,1,F,T)` | 423,235 |
+| Video only | video `(B,3,T,H,W)` | 309,219 |
 
-The downloader additionally uses Requests.
+It works for any frame size and for `T >= 8` frames, and it builds the video-only variant automatically when the shards contain no audio.
 
-### Create a virtual environment
+The original placeholder had 2,627 parameters, and its loss stayed at about 0.69 (random guessing). It only learned each label's most common answer.
 
-On Windows PowerShell:
+## Repository layout
+
+```
+backend/            FastAPI server and the exported model (multimodal_model.pt)
+frontend/           React + Tailwind Teams-style UI
+models/
+  fusion_model.py       the fusion model
+  train_multimodal.py   training, evaluation, threshold tuning, export
+  baseline_rf.py        Random Forest baseline
+  baseline_video_mlp.py video MLP baseline
+  export_baseline_results.py
+preprocessing/      compact shard generator and AVCAffe preprocessing
+src/preprocessing/  dataset readers, audio/video features, audits
+scripts/            tensor export, fine-tuning and data download scripts
+notebooks/          baseline training notebook
+results_fusion/     saved checkpoint and tuned thresholds
+reports/            result files
+docs/               PREPROCESSING.md and other notes
+```
+
+> `preprocessing/` and `src/preprocessing/` contain overlapping code. `dev` keeps the `src/preprocessing/` versions for the three files that existed in both (`manifest.py`, `video_features.py`, `windows.py`).
+
+## Setup
 
 ```powershell
-python -m venv .venv
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Activate it:
+Use a GPU build of PyTorch for training. The scripts pick CUDA automatically when it is available.
 
+## Data
+
+Training reads cached tensor shards: `shard_*.pt` files in a `train/` folder and a `val/` folder. Each shard is a dict with:
+
+| Key | Shape | Notes |
+|---|---|---|
+| `video` | `(N,C,T,H,W)` (or `(N,T,C,H,W)`) | uint8 or float |
+| `labels` | `(N,3)` | 1 = High, 0 = Low, -1 = missing |
+| `audio` | `(N,1,F,T)` or `(N,F,T)` | optional |
+
+The compact shards from `preprocessing/make_compact_shards.py` are video only: 8 frames at 64×64. The shards are not stored in git. Ask Siddharth where they are.
+
+## Training
+
+Run everything from the repo root.
+
+**1. Test the pipeline on random data** (no shards needed). The numbers are meaningless, because the data is random:
 ```powershell
-.\.venv\Scripts\Activate.ps1
+python models/train_multimodal.py --dummy
+python models/train_multimodal.py --dummy --dummy-audio
 ```
 
-### Install dependencies
-
+**2. Sanity check on real data.** It trains on 64 clips for 50 epochs. The loss must fall clearly below its starting value (the script prints PASS or FAIL):
 ```powershell
-python -m pip install numpy opencv-python-headless av requests
+python models/train_multimodal.py --train-dir "PATH\TO\train" --val-dir "PATH\TO\val" --sanity
 ```
 
-**Environment note:** Development on the original Windows machine is subject to Windows Smart App Control restrictions. PyTorch and certain compiled dependencies may be blocked. Local preprocessing therefore uses pure Python, NumPy, OpenCV and PyAV. PyTorch-dependent components should be tested in Google Colab or a suitable compute environment.
-
-## Dataset Directory
-
-The raw dataset is stored separately from the Git repository.
-
-Example local directory:
-
-```text
-C:\dev\data\avcaffe\
-│
-├── ground_truths\
-├── info\
-├── videos\
-│   └── shorter_segments\
-│
-├── face_crops\
-│
-└── manifest.csv
+**3. Full training:**
+```powershell
+python models/train_multimodal.py --train-dir "PATH\TO\train" --val-dir "PATH\TO\val" --epochs 15
 ```
 
-Keeping large datasets and generated features outside the Git repository prevents unnecessary repository growth.
+**4. Export for the backend**, only after the model clearly beats the majority-class baseline:
+```powershell
+python models/train_multimodal.py --train-dir "PATH\TO\train" --val-dir "PATH\TO\val" --epochs 15 --export backend/multimodal_model.pt
+```
 
-**Important:** Raw dataset files, participant-level information and API credentials must not be committed to GitHub.
+What training does:
+- Class weights (`pos_weight = Low / High`) are computed from the **training** labels, so the rarer class is not ignored.
+- Missing labels (`-1`) are masked out of the loss.
+- The High/Low threshold is tuned **per label** on the validation set, and the best epoch is chosen by validation macro-F1.
+- The script prints a table comparing the model against a majority-class baseline, and saves `checkpoints/best_fusion.pt` and `thresholds.json`.
 
-## Current Implementation Status
+If memory runs out, add `--max-clips 3000`.
 
-Project status as of November 11, 2026:
+## Results
 
-| Component | Status |
-|---|---|
-| GitHub repository setup | Completed |
-| Dataset access and downloader | Completed |
-| Ground-truth download | Completed |
-| Metadata download | Completed |
-| Video clip download | Completed |
-| Face-crops download | In progress |
-| Dataset manifest | Completed |
-| Audio feature extraction | Core implementation completed |
-| Audio validation | Completed |
-| No-audio investigation | Completed |
-| Video feature extraction | Pending |
-| Face-crop alignment | Pending |
-| Audio-video window alignment | Pending |
-| Global normalization statistics | Pending |
-| Dataset export/cache | Pending |
-| PyTorch Dataset adapter | Pending |
-| Sanity-check visualizations | Pending |
-| Documentation and team handoff | Pending |
+| Model | Macro F1 (val) | Notes |
+|---|---|---|
+| Majority class | TODO | baseline to beat |
+| Random Forest | TODO | `models/baseline_rf.py` |
+| Video MLP | TODO | `models/baseline_video_mlp.py` |
+| Fusion model | TODO | `models/train_multimodal.py` |
 
-## Planned Work
+Even the dataset authors' 40-70M-parameter models reached only about 60-65% on these tasks, so the goal is to clearly beat the majority-class baseline, not to reach high accuracy. Thresholds are tuned on the validation set, so the reported numbers are slightly optimistic.
 
-The remaining development work is organized as follows:
+## Git workflow
 
-1. Complete the face-crops download.
-2. Inspect the face-crops directory structure.
-3. Extend the manifest with face-crop paths.
-4. Validate correspondence between video clips and face crops.
-5. Implement video frame sampling and preprocessing.
-6. Implement synchronized audio-video window generation.
-7. Compute global normalization statistics using the training split only.
-8. Implement feature caching and dataset export.
-9. Develop a PyTorch Dataset adapter and test it in Colab or on the college cluster.
-10. Perform sanity checks on features, labels, alignment and participant splits.
-11. Complete technical documentation and team handoff.
+```
+feature/*  →  dev  →  main
+```
 
-## Important Considerations
+- Work on a `feature/*` branch and open a pull request into `dev`.
+- `main` holds only stable, demo-ready code.
+- Do not commit `.pt` checkpoints or shards unless the team has agreed to. `backend/multimodal_model.pt` and `results_fusion/` are the agreed exceptions.
 
-- Training and validation must remain participant-disjoint.
-- Normalization statistics must be computed using training data only.
-- No-audio clips should not be silently discarded.
-- Audio and video windows must use consistent timestamps.
-- Dataset licensing and redistribution restrictions must be respected.
-- Implementation assumptions should be distinguished from configurations explicitly specified by the original paper.
+## Status and known issues
 
-## References
-
-1. Sarkar, Posen and Etemad (2023). *AVCAffe: A Large Scale Audio-Visual Dataset of Cognitive Load and Affect for Remote Work*. AAAI 2023.
-2. [AVCAffe Dataset – Borealis Dataverse](https://doi.org/10.5683/SP3/PSWY62)
-3. [AVCAffe Original Repository](https://github.com/pritamqu/AVCAffe)
-
----
-
-**Project:** Affect-Aware Dynamic UI  
-**Repository:** `lc1471/ml-CSD361`  
-**Focus:** Multimodal dataset preprocessing  
-**Primary modalities:** Audio and facial video
+- The model has not yet been trained and evaluated on the full real dataset. Do not treat `backend/multimodal_model.pt` as a trained model until it beats the baseline.
+- If the compact shards have no audio, the video-only variant is used.
+- Input shapes must match between the backend and the model. Check them whenever the model changes.
+- If trained-from-scratch results stay near the majority baseline, the fallback plan is frozen pretrained features (`r3d_18` or similar) plus classical classifiers.
