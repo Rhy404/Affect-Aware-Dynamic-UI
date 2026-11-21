@@ -28,7 +28,8 @@ export default function App() {
 
   // ---- meeting UI state ------------------------------------------------------
   const [chatOverride, setChatOverride] = useState(null); // user's own open/close beats the policy until the state changes
-  const chatOpen = chatOverride ?? adapt.chatOpen;
+  const minimal = Boolean(adapt.minimal); // Focus / Deep focus: no side panels, essential controls only
+  const chatOpen = minimal ? false : chatOverride ?? adapt.chatOpen;
   const [panelTab, setPanelTab] = useState("chat");
   const [demoOpen, setDemoOpen] = useState(true);
   const [micOn, setMicOn] = useState(false);
@@ -163,7 +164,7 @@ export default function App() {
       const idx = Number(e.key) - 1;
       if (idx >= 0 && idx < STATE_NAMES.length) setManualState(STATE_NAMES[idx]);
       else if (e.key.toLowerCase() === "d") setDemoOpen((o) => !o);
-      else if (e.key.toLowerCase() === "c") setChatOverride(!chatOpen);
+      else if (e.key.toLowerCase() === "c" && !STATES[stateRef.current].adapt.minimal) setChatOverride(!chatOpen);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -186,12 +187,18 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-shell-950 font-sans text-zinc-100">
-      <LeftRail
-        badges={unread}
-        showBadges={adapt.badges}
-        focusActive={isFocusMode}
-        onSelect={(id) => (id === "chat" || id === "activity") && openPanel(id)}
-      />
+      {/* Left rail slides away in minimal modes */}
+      <div
+        className={`shrink-0 overflow-hidden transition-[width] duration-500 ease-in-out ${minimal ? "w-0" : "w-[68px]"}`}
+        aria-hidden={minimal}
+      >
+        <LeftRail
+          badges={unread}
+          showBadges={adapt.badges}
+          focusActive={isFocusMode}
+          onSelect={(id) => (id === "chat" || id === "activity") && openPanel(id)}
+        />
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
@@ -204,6 +211,7 @@ export default function App() {
           chatOpen={chatOpen}
           chatBadge={badgeChat}
           demoOpen={demoOpen}
+          minimal={minimal}
           onToggleMic={() => setMicOn((v) => !v)}
           onToggleCam={() => setCamOn((v) => !v)}
           onToggleShare={() => setSharing((v) => !v)}
@@ -230,7 +238,7 @@ export default function App() {
                   {s.description}
                   {heldCount > 0 && <span className="ml-1 text-zinc-400">· {heldCount} held</span>}
                 </span>
-                {!chatOpen && (
+                {!chatOpen && !minimal && (
                   <button onClick={() => openPanel("chat")} className="shrink-0 text-brand-300 hover:text-brand-200">
                     Show chat
                   </button>
